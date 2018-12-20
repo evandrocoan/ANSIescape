@@ -144,10 +144,10 @@ class AnsiCommand(sublime_plugin.TextCommand):
 
     def run(self, edit, regions=None, clear_before=False):
         view = self.view
-        if view.settings().get("ansi_in_progres", False):
+        if view.settings().get("ansi_in_progress", False):
             debug(view, "oops ... the ansi command is already in progress")
             return
-        view.settings().set("ansi_in_progres", True)
+        view.settings().set("ansi_in_progress", True)
 
         # if the syntax has not already been changed to ansi this means the command has
         # been run via the sublime console therefore the syntax must be changed manually
@@ -175,7 +175,7 @@ class AnsiCommand(sublime_plugin.TextCommand):
             self._colorize_regions(regions)
 
         view.settings().set("spell_check", isSpellCheckEnabled)
-        view.settings().set("ansi_in_progres", False)
+        view.settings().set("ansi_in_progress", False)
         view.settings().set("ansi_size", view.size())
         view.set_read_only(True)
 
@@ -242,10 +242,10 @@ class UndoAnsiCommand(sublime_plugin.WindowCommand):
         view = self.window.active_view()
         # if ansi is in progress or don't have ansi_in_progress setting
         # don't run the command
-        if view.settings().get("ansi_in_progres", True):
+        if view.settings().get("ansi_in_progress", True):
             debug(view, "oops ... the ansi command is already executing")
             return
-        view.settings().set("ansi_in_progres", True)
+        view.settings().set("ansi_in_progress", True)
 
         # if the syntax has not already been changed from ansi this means the command has
         # been run via the sublime console therefore the syntax must be changed manually
@@ -266,7 +266,7 @@ class UndoAnsiCommand(sublime_plugin.WindowCommand):
         view.settings().erase("ansi_scratch")
         view.set_read_only(view.settings().get("ansi_read_only", False))
         view.settings().erase("ansi_read_only")
-        view.settings().erase("ansi_in_progres")
+        view.settings().erase("ansi_in_progress")
         view.settings().erase("ansi_size")
 
 
@@ -303,8 +303,8 @@ class AnsiEventListener(sublime_plugin.EventListener):
             return
         if view.settings().get("syntax") != "Packages/ANSIescape/ANSI.tmLanguage":
             return
-        if view.settings().get("ansi_in_progres", False):
-            debug(view, "ansi in progres")
+        if view.settings().get("ansi_in_progress", False):
+            debug(view, "ansi in progress")
             sublime.set_timeout_async(partial(self.check_left_ansi, view), 50)
             return
         if view.settings().get("ansi_size", view.size()) != view.size():
@@ -316,7 +316,7 @@ class AnsiEventListener(sublime_plugin.EventListener):
         if not self._is_view_valid(view):
             self._del_event_listeners(view)
             return
-        if view.settings().get("ansi_in_progres", False):
+        if view.settings().get("ansi_in_progress", False):
             return
         if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.tmLanguage":
             if not view.settings().has("ansi_enabled"):
@@ -353,6 +353,9 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
 
     process_trigger = "on_finish"
 
+    # note that ST dev 3169 is identical to ST stable 3170
+    needStringCodec = int(sublime.version()) < 3169
+
     @classmethod
     def update_build_settings(self, settings):
         global isSpellCheckEnabled
@@ -368,19 +371,21 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
     def clear_build_settings(self, settings):
         self.process_trigger = None
 
-    def on_data_process(self, proc, data):
-        # note that ST 3169 is the same with 3170
-        needDataCodec = True if int(sublime.version()) < 3169 else False
+    def auto_string_codec(self, string, encodeOrDecode, encoding='UTF-8'):
+        assert encodeOrDecode == 'encode' or encodeOrDecode == 'decode', '`encodeOrDecode` must be either "encode" or "decode"'
 
+        if not self.needStringCodec:
+            return string
+
+        return getattr(string, encodeOrDecode)(encoding)
+
+    def on_data_process(self, proc, data):
         view = self.output_view
         if not view.settings().get("syntax") == "Packages/ANSIescape/ANSI.tmLanguage":
             super(AnsiColorBuildCommand, self).on_data(proc, data)
             return
 
-        str_data = data
-
-        if needDataCodec:
-            str_data = str_data.decode(self.encoding)
+        str_data = self.auto_string_codec(data, 'decode', self.encoding)
 
         # replace unsupported ansi escape codes before going forward: 2m 4m 5m 7m 8m
         unsupported_pattern = r'\x1b\[(0;)?[24578]m'
@@ -407,18 +412,17 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
                 r.cut_area(*to_remove)
         out_data = re.sub(remove_pattern, "", str_data)
 
+        out_data = self.auto_string_codec(out_data, 'encode', self.encoding)
+
+        # send on_data without ansi codes
+        super(AnsiColorBuildCommand, self).on_data(proc, out_data)
+
         # create json serialable region representation
         json_ansi_regions = {}
         shift_val = view.size()
         for region in ansi_regions:
             region.shift(shift_val)
             json_ansi_regions.update(region.jsonable())
-
-        if needDataCodec:
-            out_data = out_data.encode(self.encoding)
-
-        # send on_data without ansi codes
-        super(AnsiColorBuildCommand, self).on_data(proc, out_data)
 
         # send ansi command
         view.run_command('ansi', args={"regions": json_ansi_regions})
