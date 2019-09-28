@@ -1,5 +1,6 @@
 [
-    { "keys": ["ctrl+f5"], "command": "ansi" },
+    { "keys": ["shift+f5"], "command": "reset_view_syntax" },
+    { "keys": ["ctrl+shift+f5"], "command": "ansi" },
     { "keys": ["ctrl+alt+c"], "command": "ansi_color_build", "args": {"kill": true} },
     { "keys": ["ctrl+shift+c"], "command": "ansi_color_build", "args": {"kill": true} },
 ]
