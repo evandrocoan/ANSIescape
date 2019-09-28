@@ -18,6 +18,11 @@ AnsiDefinition = namedtuple("AnsiDefinition", "scope regex")
 regex_obj_cache = {}
 
 
+def status(message, *formatting):
+    print("Autorefresh:", message, " ".join( str( item ) for item in formatting ) )
+    sublime.status_message(message)
+
+
 def debug(view, msg):
     if not DEBUG:
         return
@@ -147,6 +152,10 @@ class AnsiCommand(sublime_plugin.TextCommand):
         if view.settings().get("ansi_in_progress", False):
             debug(view, "oops ... the ansi command is already in progress")
             return
+
+        if view.settings().get("is_widget"):
+            status("Cannot run 'Ansi' command on widgets!")
+
         view.settings().set("ansi_in_progress", True)
 
         # if the syntax has not already been changed to ansi this means the command has
