@@ -55,6 +55,7 @@ This plugin solves this annoying problem. Not by just removing the ANSI escape c
 search for **`ANSIescape`** and press <kbd>Enter</kbd>
 
 See also:
+
 1. [ITE - Integrated Toolset Environment](https://github.com/evandrocoan/ITE)
 1. [Package control docs](https://packagecontrol.io/docs/usage) for details.
 
